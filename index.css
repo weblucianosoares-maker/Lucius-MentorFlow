@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Scrollbar for Dark Mode - Keeping existing custom styles but moving base styles to Tailwind layer if possible, or just appending. */
+/* Just prepending tailwind directives is safer. */
