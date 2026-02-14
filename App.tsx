@@ -4,6 +4,7 @@ import ChatInterface from './components/ChatInterface';
 import FinalDiagnostic from './components/FinalDiagnostic';
 import StickyHeader from './components/StickyHeader';
 import { sendMessageToAI } from './services/aiService';
+import { submitToGoogleSheet } from './services/sheetService';
 import { Message, AppState, FinalReportData } from './types';
 import { INITIAL_MESSAGE } from './constants';
 
@@ -59,6 +60,9 @@ const App: React.FC = () => {
         const reportData = response.toolCall.data as FinalReportData;
         setFinalReport(reportData);
 
+        // Submit to Google Sheets (Fire and Forget)
+        submitToGoogleSheet(reportData, [...messages, userMessage]);
+
         const transitionMessage: Message = {
           id: uuidv4(),
           role: 'model',
@@ -70,6 +74,7 @@ const App: React.FC = () => {
           setAppState(AppState.FINAL_REPORT);
         }, 2000);
       }
+
 
     } else {
       // Normal text response

@@ -17,12 +17,14 @@ app.use(express.json());
 
 // Initialize OpenAI
 const apiKey = process.env.OPENAI_API_KEY;
+
+// Only error if trying to use OpenAI without key, but don't crash entire app startup immediately
+// to allow for basic health checks if needed, though strictly we need the key for the chat.
 if (!apiKey) {
-    console.error('CRITICAL ERROR: OPENAI_API_KEY is not defined in .env.local');
-    process.exit(1);
+    console.warn('WARNING: OPENAI_API_KEY is not defined.');
 }
 
-const openai = new OpenAI({ apiKey });
+const openai = new OpenAI({ apiKey: apiKey || 'dummy' });
 
 // Tool Definition for OpenAI
 const tools = [
@@ -119,28 +121,13 @@ app.post('/api/chat', async (req, res) => {
         // Add current user message
         messages.push({ role: 'user', content: message });
 
-        // Add System Instruction as the first message
-        const systemInstruction = `
-        VOCÊ É UM MENTOR DE ELITE DE NEGÓCIOS DIGITAIS E CONSULTOR ESTRATÉGICO SÊNIOR.
-        SEU NOME É MENTORFLOW IA.
-        SUA MISSÃO: DIAGNOSTICAR O MOMENTO DO ESPECIALISTA E VENDER A MENTORIA "MENTORFLOW".
-        
-        ... (Resto das instruções do sistema serão passadas pelo frontend ou hardcoded aqui, 
-        mas por segurança e limpeza, vou importar de constants ou receber do body, 
-        mas a melhor prática é manter no backend ou receber do client se for dinâmico. 
-        Vou assumir que o client manda ou vou botar um placeholder aqui e o client manda na primeira msg como system).
-        
-        Para simplificar, vou aceitar que o "systemInstruction" venha no body ou vou usar um default aqui.
-    `;
-
-        // Check if system instruction is passed from client (it was in the Gemini implementation plan)
-        // If client sends it, use it. Otherwise use default.
+        // Check if system instruction is passed from client
         if (req.body.systemInstruction) {
             messages.unshift({ role: 'system', content: req.body.systemInstruction });
         }
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o", // Or "gpt-3.5-turbo" if preferred for cost
+            model: "gpt-4o",
             messages: messages,
             tools: tools,
             tool_choice: "auto",
@@ -162,11 +149,12 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-// Serve static files in production
+// Serve static files in production - ONLY if not running as a Vercel function
+// Vercel handles static files automatically via the 'public' folder or build output
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
     app.use(express.static(path.join(__dirname, 'dist')));
 
     app.get('*', (req, res) => {
@@ -174,6 +162,18 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
+// Only listen if run directly (node server.js), not when imported
+// Or if we are in development mode independently of how it's run
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+    // Check if we are not being imported by another module (like Vercel's wrapper)
+    // For Vercel, we just export the app.
+    // Ideally we'd use `if (import.meta.url === pathToFileURL(process.argv[1]).href)` but that needs imports.
+    // Simplest for now: if not VERCEL, listen.
+    const server = app.listen(port, () => {
+        console.log(`Server running on port ${port}`);
+    });
+
+    // Prevent EADDRINUSE errors in watch mode if needed, though node --watch handles restart process usually
+}
+
+export default app;
